@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WAF Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    :root {
+      --bg: #f4f7fb;
+      --surface: #ffffff;
+      --text: #0f1b2d;
+      --muted: #64748b;
+      --stroke: #e2e8f0;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --accent: #2563eb;
+      --warn: #f59e0b;
+      --radius: 14px;
+      --shadow: 0 4px 24px rgba(0,0,0,.06);
+    }
+    * { box-sizing: border-box; margin: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    .layout { max-width: 1280px; margin: 0 auto; padding: 24px 16px 40px; }
+    .topbar { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+    .title { font-family: 'Space Grotesk', sans-serif; font-size: clamp(1.4rem, 3.5vw, 2rem); letter-spacing: -.02em; }
+    .subtitle { color: var(--muted); font-size: .9rem; margin-top: 4px; }
+    .top-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pill { border-radius: 999px; border: 1px solid var(--stroke); background: var(--surface); padding: 6px 14px; font-weight: 700; font-size: .8rem; }
+    .pill.live { border-color: var(--success); color: var(--success); }
+    .pill.off { border-color: var(--muted); color: var(--muted); }
+    .btn { border: 1px solid var(--stroke); border-radius: 10px; background: var(--surface); color: var(--text); padding: 7px 14px; font-weight: 700; font-size: .82rem; cursor: pointer; transition: all .15s; }
+    .btn:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(37,99,235,.12); }
+
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .stat { background: var(--surface); border: 1px solid var(--stroke); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .stat-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: 6px; }
+    .stat-value { font-family: 'Space Grotesk', sans-serif; font-size: 1.8rem; font-weight: 700; line-height: 1; }
+
+    .charts { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .card { background: var(--surface); border: 1px solid var(--stroke); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+    .card-title { font-size: .95rem; font-weight: 800; margin-bottom: 10px; }
+
+    .controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+    .seg { display: inline-flex; border: 1px solid var(--stroke); border-radius: 10px; overflow: hidden; background: var(--surface); }
+    .seg button { border: none; background: transparent; padding: 8px 14px; font-weight: 700; font-size: .8rem; cursor: pointer; color: var(--text); min-width: 80px; }
+    .seg button.active { background: var(--accent); color: #fff; }
+
+    .table-wrap { border: 1px solid var(--stroke); border-radius: var(--radius); overflow: auto; background: var(--surface); box-shadow: var(--shadow); }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th { text-align: left; font-size: .72rem; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; background: #f8fafc; padding: 10px 12px; border-bottom: 1px solid var(--stroke); }
+    td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: .88rem; vertical-align: top; }
+    tbody tr:hover { background: #f8fafc; }
+    .badge { font-weight: 800; border-radius: 999px; padding: 2px 10px; font-size: .72rem; display: inline-block; }
+    .badge.blocked { color: var(--danger); background: #fef2f2; }
+    .badge.allowed { color: var(--success); background: #f0fdf4; }
+    .badge.rate-limit { color: var(--warn); background: #fffbeb; }
+    .rules-list { font-size: .76rem; color: var(--muted); max-width: 220px; word-break: break-word; }
+    .empty { padding: 24px; text-align: center; color: var(--muted); font-weight: 600; }
+
+    @media (max-width: 900px) { .charts { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="layout">
+    <section class="topbar">
+      <div>
+        <h1 class="title">WAF Console</h1>
+        <div class="subtitle">Real-time traffic decisions, latency trends &amp; incident visibility</div>
+      </div>
+      <div class="top-actions">
+        <span class="pill" id="ssePill">Connecting...</span>
+        <span class="pill" id="ratioPill">--</span>
+        <button class="btn" id="refreshBtn">Refresh</button>
+      </div>
+    </section>
+
+    <section class="stats" id="statsGrid"></section>
+
+    <section class="charts">
+      <div class="card">
+        <h3 class="card-title">Latency Trend</h3>
+        <canvas id="latencyChart" height="110"></canvas>
+      </div>
+      <div class="card">
+        <h3 class="card-title">Decision Ratio</h3>
+        <canvas id="decisionChart" height="180"></canvas>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div class="seg" id="filterSeg">
+        <button class="active" data-f="all">All</button>
+        <button data-f="blocked">Blocked</button>
+        <button data-f="allowed">Allowed</button>
+        <button data-f="rate-limit">Rate Limited</button>
+      </div>
+    </section>
+
+    <section class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Method</th>
+            <th>Path</th>
+            <th>IP</th>
+            <th>Status</th>
+            <th>Decision</th>
+            <th>Score</th>
+            <th>Rules</th>
+            <th>Latency</th>
+          </tr>
+        </thead>
+        <tbody id="eventsBody"></tbody>
+      </table>
+    </section>
+  </main>
+
+<script>
+const MAX_EVENTS = 200;
+let allEvents = [];
+let currentFilter = 'all';
+let latencyChartInst = null;
+let decisionChartInst = null;
+let sseSource = null;
+let metrics = {};
+
+const fmt = v => Number(v ?? 0).toLocaleString();
+
+function renderStats(m) {
+  document.getElementById('statsGrid').innerHTML = [
+    ['Total Requests', fmt(m.total), ''],
+    ['Blocked', fmt(m.blocked), 'color:var(--danger)'],
+    ['Allowed', fmt(m.allowed), 'color:var(--success)'],
+    ['Rate Limited', fmt(m.rateLimited ?? 0), 'color:var(--warn)'],
+    ['Avg Latency', (Number(m.avgLatencyMs ?? 0)).toFixed(2) + ' ms', ''],
+  ].map(([label, value, style]) =>
+    `<div class="stat"><div class="stat-label">${label}</div><div class="stat-value" style="${style}">${value}</div></div>`
+  ).join('');
+
+  const total = Number(m.total ?? 0);
+  const blocked = Number(m.blocked ?? 0);
+  const ratio = total > 0 ? Math.round(blocked / total * 100) : 0;
+  document.getElementById('ratioPill').textContent = `Block ${ratio}%`;
+}
+
+function badgeFor(evt) {
+  if (evt.reason === 'rate-limit') return '<span class="badge rate-limit">RATE LIMITED</span>';
+  if (evt.blocked) return '<span class="badge blocked">BLOCKED</span>';
+  return '<span class="badge allowed">ALLOWED</span>';
+}
+
+function filterClass(evt) {
+  if (currentFilter === 'all') return true;
+  if (currentFilter === 'blocked') return evt.blocked;
+  if (currentFilter === 'allowed') return !evt.blocked;
+  if (currentFilter === 'rate-limit') return evt.reason === 'rate-limit';
+  return true;
+}
+
+function renderEvents() {
+  const filtered = allEvents.filter(filterClass);
+  if (!filtered.length) {
+    document.getElementById('eventsBody').innerHTML = '<tr><td colspan="9" class="empty">No events</td></tr>';
+    return;
+  }
+  document.getElementById('eventsBody').innerHTML = filtered.map(e => `<tr>
+    <td>${e.timestamp ? new Date(e.timestamp).toLocaleTimeString() : '-'}</td>
+    <td>${e.method ?? '-'}</td>
+    <td title="${e.path ?? ''}">${(e.path ?? '').substring(0, 60)}</td>
+    <td>${e.ip ?? '-'}</td>
+    <td>${e.statusCode ?? '-'}</td>
+    <td>${badgeFor(e)}</td>
+    <td>${e.score ?? 0}</td>
+    <td class="rules-list">${(e.ruleMatches ?? []).map(r => r.rule).join(', ') || '-'}</td>
+    <td>${e.latencyMs ?? 0} ms</td>
+  </tr>`).join('');
+}
+
+function renderLatencyChart() {
+  const recent = allEvents.slice(0, 50).reverse();
+  const labels = recent.map((_, i) => String(i + 1));
+  const data = recent.map(e => e.latencyMs ?? 0);
+  const ctx = document.getElementById('latencyChart').getContext('2d');
+  if (latencyChartInst) latencyChartInst.destroy();
+  latencyChartInst = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ label: 'Latency (ms)', data, borderColor: '#2563eb', backgroundColor: 'rgba(37,99,235,.1)', fill: true, tension: .3, pointRadius: 2 }] },
+    options: { plugins: { legend: { display: true } }, scales: { y: { beginAtZero: true } }, animation: false }
+  });
+}
+
+function renderDecisionChart() {
+  const ctx = document.getElementById('decisionChart').getContext('2d');
+  if (decisionChartInst) decisionChartInst.destroy();
+  decisionChartInst = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: ['Blocked', 'Allowed'], datasets: [{ data: [metrics.blocked ?? 0, metrics.allowed ?? 0], backgroundColor: ['#dc2626', '#16a34a'], borderWidth: 0 }] },
+    options: { cutout: '62%', plugins: { legend: { position: 'bottom' } }, animation: false }
+  });
+}
+
+function renderAll() {
+  renderStats(metrics);
+  renderEvents();
+  renderLatencyChart();
+  renderDecisionChart();
+}
+
+async function loadInitial() {
+  try {
+    const r = await fetch('/api/data');
+    const d = await r.json();
+    metrics = d.metrics || {};
+    allEvents = d.events || [];
+    renderAll();
+    connectSSE(d.sseUrl);
+  } catch {
+    document.getElementById('ssePill').textContent = 'Offline';
+    document.getElementById('ssePill').className = 'pill off';
+  }
+}
+
+function connectSSE(url) {
+  if (!url) return;
+  if (sseSource) sseSource.close();
+  sseSource = new EventSource(url);
+  sseSource.onopen = () => {
+    document.getElementById('ssePill').textContent = 'Live';
+    document.getElementById('ssePill').className = 'pill live';
+  };
+  sseSource.onmessage = (msg) => {
+    try {
+      const evt = JSON.parse(msg.data);
+      allEvents.unshift(evt);
+      if (allEvents.length > MAX_EVENTS) allEvents.length = MAX_EVENTS;
+
+      // update local metrics
+      metrics.total = (metrics.total ?? 0) + 1;
+      if (evt.blocked) metrics.blocked = (metrics.blocked ?? 0) + 1;
+      else metrics.allowed = (metrics.allowed ?? 0) + 1;
+      if (evt.reason === 'rate-limit') metrics.rateLimited = (metrics.rateLimited ?? 0) + 1;
+
+      renderAll();
+    } catch {}
+  };
+  sseSource.onerror = () => {
+    document.getElementById('ssePill').textContent = 'Reconnecting...';
+    document.getElementById('ssePill').className = 'pill off';
+  };
+}
+
+document.getElementById('filterSeg').addEventListener('click', e => {
+  const btn = e.target.closest('button');
+  if (!btn) return;
+  document.querySelectorAll('#filterSeg button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentFilter = btn.dataset.f;
+  renderEvents();
+});
+
+document.getElementById('refreshBtn').addEventListener('click', loadInitial);
+
+loadInitial();
+</script>
+</body>
+</html>

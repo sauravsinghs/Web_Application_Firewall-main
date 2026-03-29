@@ -1,0 +1,6 @@
+node_modules/
+dist/
+logs/
+testing-data/evaluation_*
+.env
+*.tsbuildinfo
